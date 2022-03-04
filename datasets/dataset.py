@@ -16,7 +16,7 @@ def get_inputs(file_addr):
     if file_format == 'mat':
         return sio.loadmat(file_addr, verify_compressed_data_integrity=False)['uv']
     elif file_format == 'npy':
-        return np.load(file_addr)
+        return np.load(file_addr).astype(np.float32)
     else:
         return cv2.imread(file_addr)
 
