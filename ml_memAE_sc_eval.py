@@ -48,7 +48,7 @@ METADATA = {
 }
 
 
-def evaluate(config, ckpt_path, testing_chunked_samples_file, suffix):
+def evaluate(config, ckpt_path, testing_chunked_samples_dir, suffix):
     dataset_name = config["dataset_name"]
     device = config["device"]
     num_workers = config["num_workers"]
@@ -71,27 +71,31 @@ def evaluate(config, ckpt_path, testing_chunked_samples_file, suffix):
     print("load pre-trained success!")
 
     score_func = nn.MSELoss(reduction="none")
-
-    dataset_test = Chunked_sample_dataset(testing_chunked_samples_file, last_flow=True)
-    dataloader_test = DataLoader(dataset=dataset_test, batch_size=128, num_workers=num_workers, shuffle=False)
-
-    # bbox anomaly scores for each frame
     frame_bbox_scores = [{} for i in range(testset_num_frames.item())]
 
-    for ii, test_data in tqdm(enumerate(dataloader_test), desc="Eval: ", total=len(dataloader_test)):
-        _, sample_ofs_test, bbox_test, pred_frame_test, indices_test = test_data
-        sample_ofs_test = sample_ofs_test.cuda()
+    testing_chunk_samples_files = sorted(os.listdir(testing_chunked_samples_dir))
+    for chunk_file_idx, chunk_file in enumerate(testing_chunk_samples_files):
 
-        out_test = model(sample_ofs_test)
-        loss_of_test = score_func(out_test["recon"], sample_ofs_test).cpu().data.numpy()
-        scores = np.sum(np.sum(np.sum(loss_of_test, axis=3), axis=2), axis=1)
+      dataset_test = Chunked_sample_dataset(os.path.join(testing_chunked_samples_dir, chunk_file), last_flow=True)
+      dataloader_test = DataLoader(dataset=dataset_test, batch_size=128, num_workers=num_workers, shuffle=False)
 
-        # anomaly scores for each sample
-        for i in range(len(scores)):
-            frame_bbox_scores[pred_frame_test[i][-1].item()][i] = scores[i]
+      # bbox anomaly scores for each frame
+      
 
-    del dataset_test
-    gc.collect()
+      for ii, test_data in tqdm(enumerate(dataloader_test), desc="Eval: ", total=len(dataloader_test)):
+          _, sample_ofs_test, bbox_test, pred_frame_test, indices_test = test_data
+          sample_ofs_test = sample_ofs_test.cuda()
+
+          out_test = model(sample_ofs_test)
+          loss_of_test = score_func(out_test["recon"], sample_ofs_test).cpu().data.numpy()
+          scores = np.sum(np.sum(np.sum(loss_of_test, axis=3), axis=2), axis=1)
+
+          # anomaly scores for each sample
+          for i in range(len(scores)):
+              frame_bbox_scores[pred_frame_test[i][-1].item()][i] = scores[i]
+
+      del dataset_test
+      gc.collect()
 
     joblib.dump(frame_bbox_scores, os.path.join(config["eval_root"], config["exp_name"],
                                                 "frame_bbox_scores_%s.json" % suffix))
@@ -153,9 +157,9 @@ if __name__ == '__main__':
     dataset_base_dir = config["dataset_base_dir"]
     dataset_name = config["dataset_name"]
 
-    testing_chunked_samples_file = os.path.join("./data", config["dataset_name"],
-                                                "testing/chunked_samples/chunked_samples_00.pkl")
+    testing_chunked_samples_dir = os.path.join("./data", config["dataset_name"],
+                                                "testing/chunked_samples/chunked_samples")
 
     with torch.no_grad():
-        auc = evaluate(config, model_save_path, testing_chunked_samples_file, suffix="best")
+        auc = evaluate(config, model_save_path, testing_chunked_samples_dir, suffix="best")
         print(auc)

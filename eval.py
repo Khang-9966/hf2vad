@@ -41,13 +41,16 @@ METADATA = {
     },
     "ucf": {
     "testing_video_num": 24,
-    "testing_frames_cnt": [1366, 347, 389, 918, 528, 2159, 468, 2192, 243, 1314, 1773, 155, 716, 1835, 647, 1005, 1495, 1771, 1216, 2580, 565, 1277, 1524, 1862]
+    "testing_frames_cnt": [1366, 347, 389, 918, 528, 
+    2159, 468, 2192, 243, 1314, 1773, 155, 
+    716, 1835, 647, 1005, 1495, 1771, 1216, 
+    2580, 565, 1277, 1524, 1862]
   }
 
 }
 
 
-def evaluate(config, ckpt_path, testing_chunked_samples_file, training_stats_path, suffix):
+def evaluate(config, ckpt_path, testing_chunked_samples_dir, training_stats_path, suffix):
     dataset_name = config["dataset_name"]
     dataset_base_dir = config["dataset_base_dir"]
     device = config["device"]
@@ -83,37 +86,39 @@ def evaluate(config, ckpt_path, testing_chunked_samples_file, training_stats_pat
                                 np.std(training_scores_stats["frame_training_stats"])
 
     score_func = nn.MSELoss(reduction="none")
-
-    dataset_test = Chunked_sample_dataset(testing_chunked_samples_file)
-    dataloader_test = DataLoader(dataset=dataset_test, batch_size=128, num_workers=num_workers, shuffle=False)
-
     # bbox anomaly scores for each frame
     frame_bbox_scores = [{} for i in range(testset_num_frames.item())]
-    for test_data in tqdm(dataloader_test, desc="Eval: ", total=len(dataloader_test)):
+    
+    testing_chunk_samples_files = sorted(os.listdir(testing_chunked_samples_dir))
 
-        sample_frames_test, sample_ofs_test, bbox_test, pred_frame_test, indices_test = test_data
-        sample_frames_test = sample_frames_test.to(device)
-        sample_ofs_test = sample_ofs_test.to(device)
+    for chunk_file_idx, chunk_file in enumerate(testing_chunk_samples_files):
+      dataset_test = Chunked_sample_dataset(os.path.join(testing_chunked_samples_dir, chunk_file))
+      dataloader_test = DataLoader(dataset=dataset_test, batch_size=128, num_workers=num_workers, shuffle=False)
+      for test_data in tqdm(dataloader_test, desc="Eval: ", total=len(dataloader_test)):
 
-        out_test = model(sample_frames_test, sample_ofs_test, mode="test")
+          sample_frames_test, sample_ofs_test, bbox_test, pred_frame_test, indices_test = test_data
+          sample_frames_test = sample_frames_test.to(device)
+          sample_ofs_test = sample_ofs_test.to(device)
 
-        loss_of_test = score_func(out_test["of_recon"], out_test["of_target"]).cpu().data.numpy()
-        loss_frame_test = score_func(out_test["frame_pred"], out_test["frame_target"]).cpu().data.numpy()
+          out_test = model(sample_frames_test, sample_ofs_test, mode="test")
 
-        of_scores = np.sum(np.sum(np.sum(loss_of_test, axis=3), axis=2), axis=1)
-        frame_scores = np.sum(np.sum(np.sum(loss_frame_test, axis=3), axis=2), axis=1)
+          loss_of_test = score_func(out_test["of_recon"], out_test["of_target"]).cpu().data.numpy()
+          loss_frame_test = score_func(out_test["frame_pred"], out_test["frame_target"]).cpu().data.numpy()
 
-        if training_stats_path is not None:
-            # mean-std normalization
-            of_scores = (of_scores - of_mean) / of_std
-            frame_scores = (frame_scores - frame_mean) / frame_std
+          of_scores = np.sum(np.sum(np.sum(loss_of_test, axis=3), axis=2), axis=1)
+          frame_scores = np.sum(np.sum(np.sum(loss_frame_test, axis=3), axis=2), axis=1)
 
-        scores = config["w_r"] * of_scores + config["w_p"] * frame_scores
+          if training_stats_path is not None:
+              # mean-std normalization
+              of_scores = (of_scores - of_mean) / of_std
+              frame_scores = (frame_scores - frame_mean) / frame_std
 
-        for i in range(len(scores)):
-            frame_bbox_scores[pred_frame_test[i][-1].item()][i] = scores[i]
+          scores = config["w_r"] * of_scores + config["w_p"] * frame_scores
+        
+          for i in range(len(scores)):
+              frame_bbox_scores[pred_frame_test[i][-1].item()][i] = scores[i]
 
-    del dataset_test
+      del dataset_test
 
     # joblib.dump(frame_bbox_scores,
     #             os.path.join(config["eval_root"], config["exp_name"], "frame_bbox_scores_%s.json" % suffix))
@@ -177,8 +182,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     config = yaml.safe_load(open(args.cfg_file))
-    testing_chunked_samples_file = os.path.join("./data", config["dataset_name"],
-                                                "testing/chunked_samples/chunked_samples_00.pkl")
+    testing_chunked_samples_dir = os.path.join("./data", config["dataset_name"],
+                                                "testing/chunked_samples")
 
     from train import cal_training_stats
 
@@ -189,7 +194,7 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         auc = evaluate(config, args.model_save_path,
-                       testing_chunked_samples_file,
+                       testing_chunked_samples_dir,
                        training_stat_path, suffix="best")
 
         print(auc)
