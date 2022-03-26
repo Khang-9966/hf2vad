@@ -21,12 +21,12 @@ device: cuda:0
 dataset_base_dir: ./data
 dataset_name: ucf
 exp_name: ucf_ML_MemAE_SC_CVAE_finetune
-ckpt_root: /content/drive/MyDrive/checkpoint/hf2vad_ucf_val_fix/ckpt
-log_root: /content/drive/MyDrive/checkpoint/hf2vad_ucf_val_fix/log
-eval_root: /content/drive/MyDrive/checkpoint/hf2vad_ucf_val_fix/eval
+ckpt_root: /content/drive/MyDrive/checkpoint/hf2vad_ucf_new_data/ckpt
+log_root: /content/drive/MyDrive/checkpoint/hf2vad_ucf_new_data/log
+eval_root: /content/drive/MyDrive/checkpoint/hf2vad_ucf_new_data/eval
 
 ML_MemAE_SC_pretrained: False
-pretrained: /content/drive/MyDrive/checkpoint/hf2vad_ucf_val_fix/ckpt/ucf_ML_MemAE_SC_CVAE/best.pth
+pretrained: /content/drive/MyDrive/checkpoint/hf2vad_ucf_new_data/ckpt/ucf_ML_MemAE_SC_CVAE/best.pth
 model_savename: model.pth
 # num of iterations to log
 logevery: 100
